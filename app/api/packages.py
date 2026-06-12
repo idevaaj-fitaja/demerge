@@ -56,17 +56,8 @@ async def list_packages_with_status():
                 pkg["signed_count"] = 0
                 pkg["total_count"] = 0
                 continue
-            signed_count = 0
             total_count = len(documents)
-            for doc in documents:
-                try:
-                    pdf_bytes = storage.read_file(doc.get("stored_path", ""))
-                    if pdf_bytes:
-                        sig_result = detect_signature_from_bytes(pdf_bytes)
-                        if sig_result.get("is_signed"):
-                            signed_count += 1
-                except Exception:
-                    pass
+            signed_count = sum(1 for d in documents if d.get("status") == "signed")
             if signed_count == total_count:
                 pkg["signature_status"] = "all_signed"
             elif signed_count > 0:
@@ -98,12 +89,7 @@ async def merge_documents(employee_name: str):
 
         unsigned_docs = []
         for doc in documents:
-            pdf_bytes = storage.read_file(doc.get("stored_path", ""))
-            if pdf_bytes:
-                sig_result = detect_signature_from_bytes(pdf_bytes)
-                if not sig_result.get("is_signed"):
-                    unsigned_docs.append(doc.get("original_filename", "Unknown"))
-            else:
+            if doc.get("status") != "signed":
                 unsigned_docs.append(doc.get("original_filename", "Unknown"))
 
         if unsigned_docs:
@@ -215,13 +201,16 @@ async def check_signatures(employee_name: str):
         results = []
         all_signed = True
         for doc in documents:
-            pdf_bytes = storage.read_file(doc.get("stored_path", ""))
-            if pdf_bytes:
-                sig_result = detect_signature_from_bytes(pdf_bytes)
-            else:
-                sig_result = {"is_signed": False, "signature_type": "none", "signers": [], "platform": "unknown", "details": "File not found"}
-            sig_result["document_name"] = doc.get("original_filename", "Unknown")
-            sig_result["document_type"] = doc.get("doc_type", "Unknown")
+            sig_result = {
+                "is_signed": doc.get("status") == "signed",
+                "signature_type": "digital" if doc.get("status") == "signed" else "none",
+                "signers": doc.get("signers", []) or [],
+                "platform": doc.get("platform") or "unknown",
+                "signed_date": doc.get("document_date"),
+                "details": "Cached from upload",
+                "document_name": doc.get("original_filename", "Unknown"),
+                "document_type": doc.get("doc_type") or "Unknown",
+            }
             results.append(sig_result)
             if not sig_result["is_signed"]:
                 all_signed = False
@@ -243,14 +232,8 @@ async def get_signature_status(employee_name: str):
         if not documents:
             return {"employee_name": employee_name, "status": "no_documents", "message": "No documents uploaded yet"}
 
-        signed_count = 0
         total_count = len(documents)
-        for doc in documents:
-            pdf_bytes = storage.read_file(doc.get("stored_path", ""))
-            if pdf_bytes:
-                sig_result = detect_signature_from_bytes(pdf_bytes)
-                if sig_result["is_signed"]:
-                    signed_count += 1
+        signed_count = sum(1 for d in documents if d.get("status") == "signed")
 
         if signed_count == total_count:
             status = "all_signed"
