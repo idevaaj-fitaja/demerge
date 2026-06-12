@@ -8,6 +8,9 @@ from app.services.signature_detector import detect_signature_from_bytes, detect_
 from app.config import settings, CLOUD_MODE, DATA_DIR
 from pathlib import Path
 from urllib.parse import unquote
+from concurrent.futures import ThreadPoolExecutor
+import zipfile
+import io
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 merger = PDFMerger()
@@ -67,6 +70,80 @@ async def list_packages_with_status():
             pkg["signed_count"] = signed_count
             pkg["total_count"] = total_count
         return packages
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_packages(body: dict):
+    try:
+        employee_names = body.get("employee_names", [])
+        if not employee_names:
+            raise HTTPException(status_code=400, detail="No employee names provided")
+
+        deleted = []
+        errors = []
+        for name in employee_names:
+            try:
+                resolved = resolve_employee_name(unquote(name)) or name
+                storage.delete_employee_files(resolved)
+                delete_employee_all(resolved)
+                deleted.append(resolved)
+            except Exception as e:
+                errors.append({"employee": name, "error": str(e)})
+
+        insert_audit_log({"action": "bulk_delete", "status": "success", "details": {"deleted": deleted, "errors": errors}})
+        return {"success": True, "deleted": deleted, "errors": errors}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bulk-download")
+async def bulk_download_packages(body: dict):
+    try:
+        employee_names = body.get("employee_names", [])
+        if not employee_names:
+            raise HTTPException(status_code=400, detail="No employee names provided")
+
+        buf = io.BytesIO()
+        found = []
+
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for name in employee_names:
+                resolved = resolve_employee_name(unquote(name)) or name
+                package = get_package_by_employee(resolved)
+                if not package or not package.get("merged_pdf_path"):
+                    continue
+
+                merged_path = package["merged_pdf_path"]
+
+                if CLOUD_MODE:
+                    pdf_bytes = storage.read_file(merged_path)
+                else:
+                    resolved_path = resolve_path(merged_path)
+                    if not resolved_path or not resolved_path.exists():
+                        continue
+                    pdf_bytes = resolved_path.read_bytes()
+
+                if pdf_bytes:
+                    safe_name = resolved.replace("/", "_").replace(" ", "_")
+                    zf.writestr(f"{safe_name}_merged.pdf", pdf_bytes)
+                    found.append(resolved)
+
+        if not found:
+            raise HTTPException(status_code=404, detail="No merged PDFs found for selected employees")
+
+        buf.seek(0)
+        insert_audit_log({"action": "bulk_download", "status": "success", "details": {"employees": found}})
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename=merged_documents.zip"}
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

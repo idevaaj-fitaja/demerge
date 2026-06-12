@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { fetchPackages, fetchDocuments, fetchSignatureDetails, mergePackage, deletePackage, getDownloadUrl, getDocumentDownloadUrl } from '../lib/api.js'
+  import { fetchPackages, fetchDocuments, fetchSignatureDetails, mergePackage, deletePackage, getDownloadUrl, getDocumentDownloadUrl, bulkDeletePackages, bulkDownloadPackages } from '../lib/api.js'
 
   let packages = $state([])
   let loading = $state(true)
@@ -15,6 +15,9 @@
   let sigs = $state(null)
   let loadingDocs = $state(false)
 
+  let selected = $state({})
+  let bulkAction = $state(null)
+
   onMount(async () => {
     await loadPackages()
   })
@@ -27,6 +30,56 @@
       console.error(e)
     } finally {
       loading = false
+    }
+  }
+
+  function toggleSelect(empName) {
+    selected = { ...selected, [empName]: !selected[empName] }
+  }
+
+  function toggleSelectAll() {
+    const allSelected = filtered.length > 0 && filtered.every(p => selected[p.employee_name])
+    const next = {}
+    if (!allSelected) {
+      for (const p of filtered) next[p.employee_name] = true
+    }
+    selected = next
+  }
+
+  let selectedCount = $derived(Object.values(selected).filter(Boolean).length)
+  let allSelected = $derived(filtered.length > 0 && filtered.every(p => selected[p.employee_name]))
+
+  async function handleBulkDelete() {
+    const names = Object.keys(selected).filter(k => selected[k])
+    if (!names.length) return
+    bulkAction = 'delete'
+    actionMessage = null
+    try {
+      const result = await bulkDeletePackages(names)
+      selected = {}
+      actionMessage = { type: 'success', text: `Deleted ${result.deleted.length} employee(s)` }
+      await loadPackages()
+    } catch (e) {
+      actionMessage = { type: 'error', text: e.message }
+    } finally {
+      bulkAction = null
+      setTimeout(() => actionMessage = null, 3000)
+    }
+  }
+
+  async function handleBulkDownload() {
+    const names = Object.keys(selected).filter(k => selected[k])
+    if (!names.length) return
+    bulkAction = 'download'
+    actionMessage = null
+    try {
+      await bulkDownloadPackages(names)
+      actionMessage = { type: 'success', text: 'Download started' }
+    } catch (e) {
+      actionMessage = { type: 'error', text: e.message }
+    } finally {
+      bulkAction = null
+      setTimeout(() => actionMessage = null, 3000)
     }
   }
 
@@ -87,12 +140,6 @@
     }
   }
 
-  function sigIcon(status) {
-    if (status === 'all_signed') return '●'
-    if (status === 'partially_signed') return '◐'
-    return '○'
-  }
-
   function sigMap() {
     const map = {}
     if (sigs?.documents) {
@@ -130,34 +177,82 @@
       class="w-full border border-border rounded-md px-3 py-2 text-sm mt-6 focus:outline-none focus:border-ink transition-colors"
     />
 
+    {#if selectedCount > 0}
+      <div class="flex items-center justify-between mt-4 px-3 py-2.5 bg-ink text-white rounded-lg text-sm">
+        <span>{selectedCount} selected</span>
+        <div class="flex items-center gap-2">
+          <button
+            class="px-3 py-1 bg-white/20 rounded text-xs font-medium hover:bg-white/30 transition-colors disabled:opacity-30 flex items-center gap-1.5"
+            disabled={bulkAction === 'download'}
+            onclick={handleBulkDownload}
+          >
+            {#if bulkAction === 'download'}
+              <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              Downloading...
+            {:else}
+              ⬇ Download ZIP
+            {/if}
+          </button>
+          <button
+            class="px-3 py-1 bg-red-500 rounded text-xs font-medium hover:bg-red-600 transition-colors disabled:opacity-30 flex items-center gap-1.5"
+            disabled={bulkAction === 'delete'}
+            onclick={handleBulkDelete}
+          >
+            {#if bulkAction === 'delete'}
+              <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              Deleting...
+            {:else}
+              🗑 Delete
+            {/if}
+          </button>
+          <button
+            class="px-3 py-1 bg-white/20 rounded text-xs font-medium hover:bg-white/30 transition-colors"
+            onclick={() => selected = {}}
+          >
+            ✕ Clear
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <div class="space-y-2 mt-4">
       {#each filtered as pkg}
         {@const empName = pkg.employee_name}
         {@const isOpen = expanded === empName}
         {@const hasMerged = !!pkg.merged_pdf_path}
+        {@const isChecked = !!selected[empName]}
 
         <div class="border border-border rounded-lg overflow-hidden {isOpen ? 'border-ink' : 'hover:border-ink'} transition-colors">
-          <button
-            class="w-full text-left px-4 py-3 flex items-center justify-between bg-[#fafafa] hover:bg-[#f0f0f0] transition-colors"
-            onclick={() => toggleExpand(empName)}
-          >
-            <div class="flex items-center gap-3">
-              <span class="text-sm">○</span>
-              <span class="text-sm font-semibold">{empName}</span>
-              <span class="text-xs text-muted">— {pkg.document_count || 0} docs</span>
-              {#if hasMerged}
-                <span class="text-xs text-green-700 bg-green-50 px-1.5 py-0.5 rounded">Merged</span>
-              {:else}
-                <span class="text-xs text-muted bg-gray-100 px-1.5 py-0.5 rounded">Not merged</span>
-              {/if}
-            </div>
-            <svg class="w-4 h-4 text-muted transition-transform {isOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+          <div class="flex items-center bg-[#fafafa] hover:bg-[#f0f0f0] transition-colors">
+            <label class="flex items-center px-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onchange={(e) => { e.stopPropagation(); toggleSelect(empName) }}
+                class="w-4 h-4 rounded border-border text-ink focus:ring-ink cursor-pointer"
+              />
+            </label>
+            <button
+              class="w-full text-left py-3 pr-4 flex items-center justify-between"
+              onclick={() => toggleExpand(empName)}
+            >
+              <div class="flex items-center gap-3">
+                <span class="text-sm font-semibold">{empName}</span>
+                <span class="text-xs text-muted">— {pkg.document_count || 0} docs</span>
+                {#if hasMerged}
+                  <span class="text-xs text-green-700 bg-green-50 px-1.5 py-0.5 rounded">Merged</span>
+                {:else}
+                  <span class="text-xs text-muted bg-gray-100 px-1.5 py-0.5 rounded">Not merged</span>
+                {/if}
+              </div>
+              <svg class="w-4 h-4 text-muted transition-transform {isOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
 
           {#if isOpen}
-            <div class="px-4 py-4 border-t border-border bg-white">
+            <div class="px-4 py-4 border-t border-border bg-white ml-10">
               <div class="grid grid-cols-4 gap-4">
                 <div class="col-span-3">
                   {#if loadingDocs}

@@ -80,6 +80,34 @@ export async function deletePackage(employeeName) {
   return res.json()
 }
 
+export async function bulkDeletePackages(employeeNames) {
+  const res = await fetch(`${API_BASE}/packages/bulk-delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_names: employeeNames })
+  })
+  if (!res.ok) throw new Error('Bulk delete failed')
+  return res.json()
+}
+
+export async function bulkDownloadPackages(employeeNames) {
+  const res = await fetch(`${API_BASE}/packages/bulk-download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_names: employeeNames })
+  })
+  if (!res.ok) throw new Error('Bulk download failed')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'merged_documents.zip'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export async function clearDocumentStatus(employeeName) {
   const res = await fetch(`${API_BASE}/packages/${employeeName}/clear-status`, {
     method: 'POST'
