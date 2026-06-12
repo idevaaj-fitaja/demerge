@@ -38,12 +38,6 @@ async def get_config():
     return {"app_name": settings.APP_NAME, "required_documents": settings.REQUIRED_DOCUMENTS, "optional_documents": settings.OPTIONAL_DOCUMENTS, "document_types": settings.ALL_DOCUMENT_TYPES, "platforms": settings.PLATFORMS}
 
 
-if not CLOUD_MODE:
-    FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-    if FRONTEND_DIR.exists():
-        app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

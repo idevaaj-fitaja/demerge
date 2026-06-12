@@ -57,39 +57,6 @@ async def upload_documents(files: List[UploadFile] = File(...), employee_name: s
         raise HTTPException(status_code=500, detail=f"Upload error: {type(e).__name__}: {str(e)}")
 
 
-@router.get("/")
-async def list_documents():
-    try:
-        return get_all_documents()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/{employee_name}")
-async def get_employee_documents(employee_name: str):
-    try:
-        return get_documents_by_employee(employee_name)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/{doc_id}")
-async def delete_doc(doc_id: str):
-    try:
-        delete_document(doc_id)
-        return {"success": True, "message": "Document deleted"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/{employee_name}/summary")
-async def get_employee_summary(employee_name: str):
-    try:
-        return processor.get_employee_summary(employee_name)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # ── Pre-signed upload (for Vercel: file bypasses backend) ────────
 
 class UploadURLRequest(BaseModel):
@@ -147,45 +114,54 @@ async def process_uploaded_files(payload: ProcessRequest):
 
     employee_name = payload.employee_name.strip()[:100]
     try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from supabase import create_client
         sb = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
         bucket = settings.SUPABASE_STORAGE_BUCKET
 
-        stored_files = []
-        for file_info in payload.files:
+        def download_file(file_info):
             storage_path = file_info.get("storage_path", "")
             filename = file_info.get("filename", "unknown.pdf")
-
             try:
                 file_bytes = sb.storage.from_(bucket).download(storage_path)
             except Exception:
-                continue
-
+                return None
             if len(file_bytes) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-                continue
+                return None
             if file_bytes[:4] != PDF_MAGIC:
-                continue
-
+                return None
             file_hash = hashlib.md5(file_bytes).hexdigest()[:8]
-            stored_files.append({
+            return {
                 "path": storage_path,
                 "filename": f"{file_hash}_{storage._sanitize_filename(filename)}",
                 "original_filename": filename,
                 "file_size": len(file_bytes),
                 "file_hash": file_hash,
                 "content": file_bytes,
-            })
+            }
+
+        with ThreadPoolExecutor(max_workers=min(len(payload.files), 8)) as pool:
+            futures = {pool.submit(download_file, fi): fi for fi in payload.files}
+            stored_files = [f.result() for f in as_completed(futures) if f.result()]
 
         if not stored_files:
             return {"success": False, "message": "No valid PDF files found", "unsigned_files": [], "signed_count": 0, "total_count": len(payload.files)}
 
+        def check_signature(file_info):
+            return file_info["path"], detect_signature_from_bytes(file_info["content"])
+
+        with ThreadPoolExecutor(max_workers=min(len(stored_files), 8)) as pool:
+            sig_futures = {pool.submit(check_signature, fi): fi for fi in stored_files}
+            sig_results = {}
+            for f in as_completed(sig_futures):
+                path, result = f.result()
+                sig_results[path] = result
+
         unsigned_files = []
         signed_files = []
-        sig_results = {}
 
         for file_info in stored_files:
-            sig_result = detect_signature_from_bytes(file_info["content"])
-            sig_results[file_info["path"]] = sig_result
+            sig_result = sig_results[file_info["path"]]
             if sig_result["is_signed"]:
                 signed_files.append(file_info)
             else:
@@ -247,7 +223,7 @@ async def process_uploaded_files(payload: ProcessRequest):
 
 # ── Auto-cleanup: delete files older than TTL ───────────────────
 
-CLEANUP_TTL_HOURS = int(__import__("os").getenv("CLEANUP_TTL_HOURS", "1"))
+CLEANUP_TTL_HOURS = int(__import__("os").getenv("CLEANUP_TTL_HOURS", "12"))
 
 
 @router.post("/cleanup")
@@ -294,3 +270,38 @@ async def cleanup_expired():
         }
     except Exception as e:
         return {"success": False, "message": f"Cleanup error: {str(e)}"}
+
+
+# ── GET routes (after POST routes to avoid path conflict) ───────
+
+@router.get("/")
+async def list_documents():
+    try:
+        return get_all_documents()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{employee_name}")
+async def get_employee_documents(employee_name: str):
+    try:
+        return get_documents_by_employee(employee_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{doc_id}")
+async def delete_doc(doc_id: str):
+    try:
+        delete_document(doc_id)
+        return {"success": True, "message": "Document deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{employee_name}/summary")
+async def get_employee_summary(employee_name: str):
+    try:
+        return processor.get_employee_summary(employee_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
