@@ -54,16 +54,6 @@ export async function uploadDocuments(employeeName, files) {
   return res.json()
 }
 
-export async function getUploadUrls(employeeName, filenames) {
-  const res = await fetch(`${API_BASE}/documents/upload-url`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ employee_name: employeeName, filenames })
-  })
-  if (!res.ok) throw new Error('Failed to get upload URLs')
-  return res.json()
-}
-
 export async function processUploadedFiles(employeeName, files) {
   const res = await fetch(`${API_BASE}/documents/process`, {
     method: 'POST',

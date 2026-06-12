@@ -1,5 +1,5 @@
 <script>
-  import { fetchSignatureStatus, fetchSignatureDetails, getUploadUrls, processUploadedFiles } from '../lib/api.js'
+  import { fetchSignatureStatus, fetchSignatureDetails, processUploadedFiles } from '../lib/api.js'
   import { supabase } from '../lib/supabase.js'
 
   let employeeName = $state('')
@@ -14,6 +14,14 @@
   let fileInput = $state(null)
   let uploadDone = $state(false)
 
+  function sanitizeName(name) {
+    return name.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase().slice(0, 50)
+  }
+
+  function sanitizeFilename(name) {
+    return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  }
+
   async function handleUpload() {
     if (!employeeName || files.length === 0) return
     uploading = true
@@ -22,32 +30,24 @@
     sigDetails = null
     uploadDone = false
     try {
-      const filenames = files.map(f => f.name)
-      const urlData = await getUploadUrls(employeeName, filenames)
-      if (!urlData.success) {
-        message = urlData.message
-        messageType = 'error'
-        return
+      if (!supabase) {
+        throw new Error('Supabase not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
       }
 
+      const safeName = sanitizeName(employeeName)
       const uploaded = []
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        const urlInfo = urlData.uploads[i]
-        if (supabase && urlInfo.token) {
-          const { error } = await supabase.storage
-            .from('documents')
-            .uploadToSignedUrl(urlInfo.storage_path, urlInfo.token, file)
-          if (error) throw new Error(`Upload failed: ${error.message}`)
-        } else {
-          const res = await fetch(urlInfo.signed_url, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': 'application/pdf' }
-          })
-          if (!res.ok) throw new Error(`Upload failed for ${file.name}`)
-        }
-        uploaded.push({ storage_path: urlInfo.storage_path, filename: file.name })
+
+      for (const file of files) {
+        const safeFilename = sanitizeFilename(file.name)
+        const hash = Math.random().toString(36).slice(2, 10)
+        const storagePath = `raw/${safeName}/${hash}_${safeFilename}`
+
+        const { error } = await supabase.storage
+          .from('documents')
+          .upload(storagePath, file, { contentType: 'application/pdf' })
+
+        if (error) throw new Error(`Upload failed for ${file.name}: ${error.message}`)
+        uploaded.push({ storage_path: storagePath, filename: file.name })
       }
 
       const result = await processUploadedFiles(employeeName, uploaded)
