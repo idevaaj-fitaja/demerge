@@ -2,6 +2,8 @@
   import { onMount } from 'svelte'
   import { fetchPackages, fetchDocuments, fetchSignatureDetails, mergePackage, deletePackage, getDownloadUrl, getDocumentDownloadUrl, bulkDeletePackages, bulkDownloadPackages } from '../lib/api.js'
 
+  let { navigate } = $props()
+
   let packages = $state([])
   let loading = $state(true)
   let search = $state('')
@@ -168,6 +170,14 @@
       <div class="text-3xl mb-3 opacity-30">📭</div>
       <div class="text-sm font-medium">{search ? 'No results' : 'No documents yet'}</div>
       <div class="text-xs text-muted mt-1">{search ? 'Try a different search' : 'Merge first'}</div>
+      {#if !search}
+        <button
+          onclick={() => navigate('merge')}
+          class="mt-4 px-4 py-2 bg-ink text-white text-xs font-medium rounded-md hover:bg-[#333] transition-colors"
+        >
+          Go to Merge
+        </button>
+      {/if}
     </div>
   {:else}
     <input

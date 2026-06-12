@@ -79,11 +79,11 @@
       {:else}
         {#key pageKey}
           {#if page === 'dashboard'}
-            <Dashboard />
+            <Dashboard navigate={(p) => page = p} />
           {:else if page === 'merge'}
             <Upload />
           {:else if page === 'documents'}
-            <Documents />
+            <Documents navigate={(p) => page = p} />
           {/if}
         {/key}
       {/if}
