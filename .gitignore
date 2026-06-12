@@ -13,4 +13,12 @@ dist/
 electron/dist-bundle/
 frontend/dist/
 *.egg-info/
+*.zip
+*.dmg
+*.exe
+*.blockmap
+*.7z
+*.pkg
+electron/out/
+electron/dist-bundle/
 .DS_Store
