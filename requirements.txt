@@ -1,6 +1,7 @@
 fastapi==0.115.12
 uvicorn==0.34.2
 python-dotenv==1.1.0
+python-multipart==0.0.20
 PyPDF2==3.0.1
 pyhanko==0.25.1
 pyhanko-certvalidator==0.26.3
