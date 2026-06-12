@@ -4,6 +4,8 @@ venv-minimal.bak/
 venv-*/
 storage/
 hr_documents.db
+hr_documents.db-shm
+hr_documents.db-wal
 .DS_Store
 .env
 __pycache__/
