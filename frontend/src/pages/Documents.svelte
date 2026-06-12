@@ -200,11 +200,11 @@
     />
 
     {#if selectedCount > 0}
-      <div class="flex items-center justify-between mt-4 px-3 py-2.5 bg-ink text-white rounded-lg text-sm">
-        <span>{selectedCount} selected</span>
-        <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between mt-4 px-4 py-3 bg-ink text-white rounded-lg">
+        <span class="text-sm font-medium">{selectedCount} selected</span>
+        <div class="flex items-center gap-3">
           <button
-            class="px-3 py-1 bg-white/20 rounded text-xs font-medium hover:bg-white/30 transition-colors disabled:opacity-30 flex items-center gap-1.5"
+            class="px-4 py-1.5 bg-white/15 hover:bg-white/25 rounded-md text-xs font-medium transition-colors disabled:opacity-30 flex items-center gap-1.5"
             disabled={bulkAction === 'download'}
             onclick={handleBulkDownload}
           >
@@ -216,7 +216,7 @@
             {/if}
           </button>
           <button
-            class="px-3 py-1 bg-red-500 rounded text-xs font-medium hover:bg-red-600 transition-colors disabled:opacity-30 flex items-center gap-1.5"
+            class="px-4 py-1.5 bg-red-500 hover:bg-red-600 rounded-md text-xs font-medium transition-colors disabled:opacity-30 flex items-center gap-1.5"
             disabled={bulkAction === 'delete'}
             onclick={showBulkDeleteConfirm}
           >
@@ -228,7 +228,7 @@
             {/if}
           </button>
           <button
-            class="px-3 py-1 bg-white/20 rounded text-xs font-medium hover:bg-white/30 transition-colors"
+            class="px-4 py-1.5 bg-white/15 hover:bg-white/25 rounded-md text-xs font-medium transition-colors"
             onclick={() => selected = {}}
           >
             ✕ Clear
@@ -274,7 +274,7 @@
           </div>
 
           {#if isOpen}
-            <div class="px-4 py-4 border-t border-border bg-white ml-10">
+            <div class="px-4 py-4 border-t border-border bg-white">
               <div class="grid grid-cols-4 gap-4">
                 <div class="col-span-3">
                   {#if loadingDocs}
