@@ -64,6 +64,14 @@
       </div>
     </div>
 
+    <div class="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-3">
+      <span class="text-amber-600 text-sm mt-0.5">⏱</span>
+      <div class="text-xs text-amber-800 leading-relaxed">
+        <span class="font-semibold">Files auto-delete after 12 hours.</span>
+        Documents are stored temporarily to keep things tidy. Download anything you need before it's gone.
+      </div>
+    </div>
+
     {#if packages.length > 0}
       <h2 class="text-sm font-semibold uppercase tracking-wider text-muted mt-8 mb-3">Employees</h2>
       <div class="space-y-2">
