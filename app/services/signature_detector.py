@@ -1,13 +1,21 @@
 import io
 import re
 from typing import Dict
-from pyhanko.sign.fields import enumerate_sig_fields
-from pyhanko.pdf_utils.reader import PdfFileReader
+
+try:
+    from pyhanko.sign.fields import enumerate_sig_fields
+    from pyhanko.pdf_utils.reader import PdfFileReader
+    _HAS_PYHANKO = True
+except (ImportError, OSError):
+    _HAS_PYHANKO = False
 
 
 def detect_signature_from_bytes(pdf_bytes: bytes) -> Dict:
     """Detect signature from PDF bytes (file-like object)."""
     result = {"is_signed": False, "signature_type": "none", "signers": [], "platform": "unknown", "signed_date": None, "details": ""}
+    if not _HAS_PYHANKO:
+        result["details"] = "pyhanko not available (missing native deps)"
+        return result
     try:
         r = PdfFileReader(io.BytesIO(pdf_bytes))
         all_fields = list(enumerate_sig_fields(r))

@@ -31,7 +31,7 @@ class Settings:
     APP_VERSION: str = os.getenv("APP_VERSION", "1.0.0")
 
     MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
-    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,https://demerge.vercel.app")
 
     # Local mode paths
     STORAGE_PATH: Path = DATA_DIR / os.getenv("STORAGE_PATH", "./storage")

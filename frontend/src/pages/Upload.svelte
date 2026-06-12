@@ -1,5 +1,6 @@
 <script>
-  import { fetchSignatureStatus, fetchSignatureDetails, uploadDocuments } from '../lib/api.js'
+  import { fetchSignatureStatus, fetchSignatureDetails, getUploadUrls, processUploadedFiles } from '../lib/api.js'
+  import { supabase } from '../lib/supabase.js'
 
   let employeeName = $state('')
   let files = $state([])
@@ -21,7 +22,35 @@
     sigDetails = null
     uploadDone = false
     try {
-      const result = await uploadDocuments(employeeName, files)
+      const filenames = files.map(f => f.name)
+      const urlData = await getUploadUrls(employeeName, filenames)
+      if (!urlData.success) {
+        message = urlData.message
+        messageType = 'error'
+        return
+      }
+
+      const uploaded = []
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        const urlInfo = urlData.uploads[i]
+        if (supabase && urlInfo.token) {
+          const { error } = await supabase.storage
+            .from('documents')
+            .uploadToSignedUrl(urlInfo.storage_path, urlInfo.token, file)
+          if (error) throw new Error(`Upload failed: ${error.message}`)
+        } else {
+          const res = await fetch(urlInfo.signed_url, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': 'application/pdf' }
+          })
+          if (!res.ok) throw new Error(`Upload failed for ${file.name}`)
+        }
+        uploaded.push({ storage_path: urlInfo.storage_path, filename: file.name })
+      }
+
+      const result = await processUploadedFiles(employeeName, uploaded)
 
       if (result.success) {
         message = result.message
