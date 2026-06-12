@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { fetchPackages, fetchDocuments, fetchSignatureStatus, fetchSignatureDetails, mergePackage, deletePackage, getDownloadUrl, getDocumentDownloadUrl } from '../lib/api.js'
+  import { fetchPackages, fetchDocuments, fetchSignatureDetails, mergePackage, deletePackage, getDownloadUrl, getDocumentDownloadUrl } from '../lib/api.js'
 
   let packages = $state([])
   let loading = $state(true)
@@ -8,6 +8,7 @@
   let expanded = $state(null)
   let confirming = $state(null)
   let merging = $state(null)
+  let deleting = $state(null)
   let actionMessage = $state(null)
 
   let docs = $state([])
@@ -57,6 +58,7 @@
 
   async function handleMerge(empName) {
     merging = empName
+    actionMessage = null
     try {
       await mergePackage(empName)
       actionMessage = { type: 'success', text: `Merged documents for ${empName}` }
@@ -70,12 +72,18 @@
   }
 
   async function handleDelete(empName) {
+    deleting = empName
+    actionMessage = null
     try {
       await deletePackage(empName)
       confirming = null
+      actionMessage = { type: 'success', text: `Deleted all data for ${empName}` }
       await loadPackages()
     } catch (e) {
       actionMessage = { type: 'error', text: e.message }
+    } finally {
+      deleting = null
+      setTimeout(() => actionMessage = null, 3000)
     }
   }
 
@@ -134,11 +142,7 @@
             onclick={() => toggleExpand(empName)}
           >
             <div class="flex items-center gap-3">
-              {#await fetchSignatureStatus(empName) then s}
-                <span class="text-sm">{sigIcon(s?.status)}</span>
-              {:catch}
-                <span class="text-sm">○</span>
-              {/await}
+              <span class="text-sm">○</span>
               <span class="text-sm font-semibold">{empName}</span>
               <span class="text-xs text-muted">— {pkg.document_count || 0} docs</span>
               {#if hasMerged}
@@ -157,7 +161,10 @@
               <div class="grid grid-cols-4 gap-4">
                 <div class="col-span-3">
                   {#if loadingDocs}
-                    <div class="text-xs text-muted">Loading...</div>
+                    <div class="flex items-center gap-2 text-xs text-muted">
+                      <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                      Scanning documents...
+                    </div>
                   {:else if docs.length > 0}
                     {@const sm = sigMap()}
                     <div class="space-y-1.5">
@@ -204,11 +211,16 @@
                     </a>
                   {:else}
                     <button
-                      class="w-full bg-ink text-white py-2 rounded-md text-xs font-medium hover:bg-[#333] transition-colors disabled:opacity-30"
+                      class="w-full bg-ink text-white py-2 rounded-md text-xs font-medium hover:bg-[#333] transition-colors disabled:opacity-30 flex items-center justify-center gap-1.5"
                       disabled={merging === empName}
                       onclick={() => handleMerge(empName)}
                     >
-                      {#if merging === empName}Merging...{:else}🔀 Merge All Signed{/if}
+                      {#if merging === empName}
+                        <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Merging...
+                      {:else}
+                        🔀 Merge All Signed
+                      {/if}
                     </button>
                   {/if}
 
@@ -216,13 +228,20 @@
                     <div class="text-xs text-muted mb-1">Are you sure?</div>
                     <div class="grid grid-cols-2 gap-1.5">
                       <button
-                        class="bg-red-500 text-white py-1.5 rounded-md text-xs font-medium hover:bg-red-600 transition-colors"
+                        class="bg-red-500 text-white py-1.5 rounded-md text-xs font-medium hover:bg-red-600 transition-colors disabled:opacity-30 flex items-center justify-center gap-1.5"
+                        disabled={deleting === empName}
                         onclick={() => handleDelete(empName)}
                       >
-                        Yes
+                        {#if deleting === empName}
+                          <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                          Deleting...
+                        {:else}
+                          Yes
+                        {/if}
                       </button>
                       <button
                         class="border border-border py-1.5 rounded-md text-xs font-medium hover:bg-[#fafafa] transition-colors"
+                        disabled={deleting === empName}
                         onclick={() => confirming = null}
                       >
                         No
@@ -230,7 +249,8 @@
                     </div>
                   {:else}
                     <button
-                      class="w-full border border-border py-2 rounded-md text-xs font-medium hover:bg-[#fafafa] transition-colors"
+                      class="w-full border border-border py-2 rounded-md text-xs font-medium hover:bg-[#fafafa] transition-colors disabled:opacity-30"
+                      disabled={merging === empName || deleting === empName}
                       onclick={() => confirming = empName}
                     >
                       🗑 Delete
