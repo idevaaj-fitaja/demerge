@@ -13,6 +13,7 @@
   let checking = $state(false)
   let fileInput = $state(null)
   let uploadDone = $state(false)
+  let dragOver = $state(false)
 
   let uploadProgress = $state({ current: 0, total: 0, phase: '', fileName: '' })
 
@@ -22,6 +23,33 @@
 
   function sanitizeFilename(name) {
     return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  }
+
+  function addFiles(newFiles) {
+    const pdfOnly = Array.from(newFiles).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
+    if (pdfOnly.length === 0) {
+      message = 'Only PDF files are accepted'
+      messageType = 'error'
+      return
+    }
+    files = [...files, ...pdfOnly]
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    dragOver = false
+    if (uploading) return
+    addFiles(e.dataTransfer.files)
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+    if (!uploading) dragOver = true
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault()
+    dragOver = false
   }
 
   async function handleUpload() {
@@ -98,7 +126,7 @@
   }
 
   function handleFileInput(e) {
-    files = Array.from(e.target.files)
+    addFiles(e.target.files)
   }
 
   function removeFile(index) {
@@ -154,14 +182,39 @@
 
     <div>
       <label class="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">Documents (PDF)</label>
-      <input
-        type="file"
-        accept=".pdf"
-        multiple
-        bind:this={fileInput}
-        onchange={handleFileInput}
-        class="w-full border border-dashed border-border rounded-lg px-3 py-6 text-sm text-muted file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-ink file:text-white file:text-xs file:font-medium file:cursor-pointer hover:border-ink transition-colors"
-      />
+      <div
+        class="relative border-2 border-dashed rounded-lg transition-colors cursor-pointer
+          {dragOver ? 'border-ink bg-ink/5' : 'border-border hover:border-ink'}"
+        ondrop={handleDrop}
+        ondragover={handleDragOver}
+        ondragleave={handleDragLeave}
+        onclick={() => fileInput?.click()}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInput?.click() }}
+      >
+        <input
+          type="file"
+          accept=".pdf"
+          multiple
+          bind:this={fileInput}
+          onchange={handleFileInput}
+          class="hidden"
+        />
+        <div class="px-3 py-8 text-center">
+          {#if dragOver}
+            <div class="text-ink font-medium text-sm">Drop PDFs here</div>
+          {:else}
+            <div class="text-muted">
+              <svg class="w-8 h-8 mx-auto mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v12m-6-6h12" />
+              </svg>
+              <div class="text-sm font-medium">Drop PDFs here or <span class="text-ink underline">browse</span></div>
+              <div class="text-xs mt-1">Multiple files accepted</div>
+            </div>
+          {/if}
+        </div>
+      </div>
     </div>
 
     {#if files.length > 0}
