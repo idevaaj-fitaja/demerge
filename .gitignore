@@ -1,0 +1,16 @@
+venv-minimal/
+venv-win/
+venv-minimal.bak/
+venv-*/
+storage/
+hr_documents.db
+.DS_Store
+.env
+__pycache__/
+*.pyc
+node_modules/
+dist/
+electron/dist-bundle/
+frontend/dist/
+*.egg-info/
+.DS_Store
