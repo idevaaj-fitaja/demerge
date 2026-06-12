@@ -11,7 +11,13 @@ from app.models.database import db_health
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
 
 cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(documents_router)
 app.include_router(packages_router)
@@ -40,4 +46,4 @@ async def get_config():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=7860, log_level="info")
