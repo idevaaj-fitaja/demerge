@@ -243,3 +243,54 @@ async def process_uploaded_files(payload: ProcessRequest):
         }
     except Exception as e:
         return {"success": False, "message": f"Error: {type(e).__name__}: {str(e)}"}
+
+
+# ── Auto-cleanup: delete files older than TTL ───────────────────
+
+CLEANUP_TTL_HOURS = int(__import__("os").getenv("CLEANUP_TTL_HOURS", "1"))
+
+
+@router.post("/cleanup")
+async def cleanup_expired():
+    if not CLOUD_MODE:
+        return {"success": True, "message": "Cleanup skipped (local mode)"}
+
+    try:
+        from datetime import timedelta
+        from app.models.database import _get_supabase, delete_employee_all, get_all_packages
+
+        sb = _get_supabase()
+        cutoff = (datetime.utcnow() - timedelta(hours=CLEANUP_TTL_HOURS)).isoformat()
+
+        r = sb.table("documents").select("*").lt("created_at", cutoff).execute()
+        expired_docs = r.data or []
+
+        if not expired_docs:
+            return {"success": True, "message": "No expired files", "deleted": 0}
+
+        deleted_paths = []
+        for doc in expired_docs:
+            path = doc.get("stored_path")
+            if path:
+                try:
+                    sb.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove([path])
+                    deleted_paths.append(path)
+                except Exception:
+                    pass
+
+        expired_employees = list({d["employee_name"] for d in expired_docs})
+        for emp in expired_employees:
+            try:
+                sb.table("documents").delete().eq("employee_name", emp).execute()
+                sb.table("employee_packages").delete().eq("employee_name", emp).execute()
+            except Exception:
+                pass
+
+        return {
+            "success": True,
+            "message": f"Cleaned up {len(expired_docs)} files from {len(expired_employees)} employee(s)",
+            "deleted": len(expired_docs),
+            "storage_deleted": len(deleted_paths),
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Cleanup error: {str(e)}"}

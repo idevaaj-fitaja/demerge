@@ -1,12 +1,13 @@
 <script>
   import { onMount } from 'svelte'
-  import { fetchPackagesWithStatus } from '../lib/api.js'
+  import { fetchPackagesWithStatus, cleanupExpired } from '../lib/api.js'
 
   let packages = $state([])
   let loading = $state(true)
   let error = $state(null)
 
   onMount(async () => {
+    cleanupExpired()
     try {
       packages = await fetchPackagesWithStatus()
     } catch (e) {

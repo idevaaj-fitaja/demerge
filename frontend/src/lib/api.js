@@ -112,3 +112,12 @@ export function getDownloadUrl(employeeName) {
 export function getDocumentDownloadUrl(employeeName, docId) {
   return `${API_BASE}/packages/${encodeURIComponent(employeeName)}/download/${docId}`
 }
+
+export async function cleanupExpired() {
+  try {
+    const res = await fetch(`${API_BASE}/documents/cleanup`, { method: 'POST' })
+    return res.ok ? res.json() : null
+  } catch {
+    return null
+  }
+}
