@@ -21,8 +21,11 @@ app.include_router(packages_router)
 async def health_check():
     checks = {"status": "healthy", "mode": "cloud" if CLOUD_MODE else "local"}
     try:
-        checks["database"] = "ok" if db_health() else "error"
-        if checks["database"] == "error":
+        db_result = db_health()
+        if db_result["ok"]:
+            checks["database"] = "ok"
+        else:
+            checks["database"] = db_result
             checks["status"] = "degraded"
     except Exception as e:
         checks["status"] = "degraded"

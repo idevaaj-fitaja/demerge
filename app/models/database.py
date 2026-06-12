@@ -52,15 +52,16 @@ def _deserialize(v):
         return v
 
 
-def db_health() -> bool:
+def db_health() -> dict:
     try:
         if CLOUD_MODE:
             _get_supabase().table("documents").select("id").limit(1).execute()
+            return {"ok": True}
         else:
             _get_conn().execute("SELECT 1")
-        return True
-    except Exception:
-        return False
+            return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "type": type(e).__name__}
 
 
 # ── Init ──────────────────────────────────────────────────────────
