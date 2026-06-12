@@ -14,6 +14,8 @@
   let fileInput = $state(null)
   let uploadDone = $state(false)
 
+  let uploadProgress = $state({ current: 0, total: 0, phase: '', fileName: '' })
+
   function sanitizeName(name) {
     return name.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase().slice(0, 50)
   }
@@ -29,6 +31,7 @@
     sigStatus = null
     sigDetails = null
     uploadDone = false
+    uploadProgress = { current: 0, total: files.length, phase: 'upload', fileName: '' }
     try {
       if (!supabase) {
         throw new Error('Supabase not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
@@ -37,7 +40,9 @@
       const safeName = sanitizeName(employeeName)
       const uploaded = []
 
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        uploadProgress = { current: i + 1, total: files.length, phase: 'upload', fileName: file.name }
         const safeFilename = sanitizeFilename(file.name)
         const hash = Math.random().toString(36).slice(2, 10)
         const storagePath = `raw/${safeName}/${hash}_${safeFilename}`
@@ -50,6 +55,7 @@
         uploaded.push({ storage_path: storagePath, filename: file.name })
       }
 
+      uploadProgress = { current: files.length, total: files.length, phase: 'process', fileName: '' }
       const result = await processUploadedFiles(employeeName, uploaded)
 
       if (result.success) {
@@ -58,15 +64,18 @@
         files = []
         if (fileInput) fileInput.value = ''
         uploadDone = true
+        uploadProgress = { current: 0, total: 0, phase: 'done', fileName: '' }
         await checkSignature()
       } else {
         message = result.message
         messageType = 'error'
         uploadDone = true
+        uploadProgress = { current: 0, total: 0, phase: '', fileName: '' }
       }
     } catch (e) {
       message = `Error: ${e.message}`
       messageType = 'error'
+      uploadProgress = { current: 0, total: 0, phase: '', fileName: '' }
     } finally {
       uploading = false
     }
@@ -75,6 +84,7 @@
   async function checkSignature() {
     if (!employeeName) return
     checking = true
+    uploadProgress = { current: 0, total: 0, phase: 'scan', fileName: '' }
     try {
       sigStatus = await fetchSignatureStatus(employeeName)
       sigDetails = await fetchSignatureDetails(employeeName)
@@ -83,6 +93,7 @@
       sigDetails = null
     } finally {
       checking = false
+      uploadProgress = { current: 0, total: 0, phase: '', fileName: '' }
     }
   }
 
@@ -107,6 +118,7 @@
     sigDetails = null
     message = null
     uploadDone = false
+    uploadProgress = { current: 0, total: 0, phase: '', fileName: '' }
     if (fileInput) fileInput.value = ''
   }
 
@@ -115,6 +127,14 @@
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
+
+  let progressPercent = $derived(
+    uploadProgress.phase === 'upload' && uploadProgress.total > 0
+      ? Math.round((uploadProgress.current / uploadProgress.total) * 100)
+      : uploadProgress.phase === 'process' || uploadProgress.phase === 'scan'
+        ? 100
+        : 0
+  )
 </script>
 
 <div>
@@ -165,12 +185,50 @@
       <p class="text-xs text-muted">{files.length} file(s) selected</p>
     {/if}
 
+    {#if uploading || checking}
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-muted">
+            {#if uploadProgress.phase === 'upload'}
+              Uploading {uploadProgress.fileName}...
+            {:else if uploadProgress.phase === 'process'}
+              Processing documents...
+            {:else if uploadProgress.phase === 'scan'}
+              Scanning signatures...
+            {:else}
+              Working...
+            {/if}
+          </span>
+          <span class="font-medium">
+            {#if uploadProgress.phase === 'upload'}
+              {uploadProgress.current}/{uploadProgress.total}
+            {:else if uploadProgress.phase === 'process'}
+              100%
+            {:else if uploadProgress.phase === 'scan'}
+              Scanning...
+            {/if}
+          </span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+          <div
+            class="bg-ink h-2 rounded-full transition-all duration-300 ease-out"
+            style="width: {progressPercent}%"
+          ></div>
+        </div>
+      </div>
+    {/if}
+
     <button
       onclick={handleUpload}
       disabled={!employeeName || files.length === 0 || uploading}
-      class="w-full bg-ink text-white py-2.5 rounded-md text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#333] transition-colors"
+      class="w-full bg-ink text-white py-2.5 rounded-md text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#333] transition-colors flex items-center justify-center gap-2"
     >
-      {#if uploading}Checking & Merging...{:else}Check Signatures & Merge{/if}
+      {#if uploading}
+        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        Uploading...
+      {:else}
+        Check Signatures & Merge
+      {/if}
     </button>
 
     {#if message}
@@ -203,7 +261,10 @@
 
       {#if checking}
         <div class="border border-border rounded-lg p-6 text-center">
-          <div class="text-xs text-muted">Scanning documents...</div>
+          <div class="flex items-center justify-center gap-2 text-xs text-muted">
+            <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            Scanning documents...
+          </div>
         </div>
       {:else if sigStatus}
         <div class="border border-border rounded-lg p-4">
