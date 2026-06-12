@@ -6,10 +6,17 @@ from pathlib import Path
 from typing import Optional
 from app.config import settings, CLOUD_MODE
 
-if CLOUD_MODE:
-    from supabase import create_client
-    _supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-    _bucket = settings.SUPABASE_STORAGE_BUCKET
+_supabase = None
+_bucket = None
+
+
+def _get_supabase():
+    global _supabase, _bucket
+    if _supabase is None and CLOUD_MODE:
+        from supabase import create_client
+        _supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+        _bucket = settings.SUPABASE_STORAGE_BUCKET
+    return _supabase
 
 
 class StorageService:
@@ -21,7 +28,8 @@ class StorageService:
         storage_path = f"raw/{safe_name}/{unique_filename}"
 
         if CLOUD_MODE:
-            _supabase.storage.from_(_bucket).upload(storage_path, file_content, {"content-type": "application/pdf"})
+            sb = _get_supabase()
+            sb.storage.from_(_bucket).upload(storage_path, file_content, {"content-type": "application/pdf"})
             return {
                 "path": storage_path,
                 "filename": unique_filename,
@@ -47,7 +55,7 @@ class StorageService:
         storage_path = f"merged/{safe_name}/{filename}"
 
         if CLOUD_MODE:
-            _supabase.storage.from_(_bucket).upload(storage_path, pdf_content, {"content-type": "application/pdf"})
+            _get_supabase().storage.from_(_bucket).upload(storage_path, pdf_content, {"content-type": "application/pdf"})
             return storage_path
 
         employee_dir = settings.MERGED_PATH / safe_name
@@ -59,7 +67,7 @@ class StorageService:
     def read_file(self, storage_path: str) -> Optional[bytes]:
         if CLOUD_MODE:
             try:
-                return _supabase.storage.from_(_bucket).download(storage_path)
+                return _get_supabase().storage.from_(_bucket).download(storage_path)
             except Exception:
                 return None
         p = Path(storage_path)
@@ -76,7 +84,7 @@ class StorageService:
     def get_signed_url(self, storage_path: str, expires_in: int = 3600) -> Optional[str]:
         if CLOUD_MODE:
             try:
-                r = _supabase.storage.from_(_bucket).create_signed_url(storage_path, expires_in)
+                r = _get_supabase().storage.from_(_bucket).create_signed_url(storage_path, expires_in)
                 return r["signedURL"]
             except Exception:
                 return None
@@ -85,7 +93,7 @@ class StorageService:
     def get_public_url(self, storage_path: str) -> Optional[str]:
         if CLOUD_MODE:
             try:
-                return _supabase.storage.from_(_bucket).get_public_url(storage_path)
+                return _get_supabase().storage.from_(_bucket).get_public_url(storage_path)
             except Exception:
                 return None
         return storage_path
@@ -93,7 +101,7 @@ class StorageService:
     def delete_file(self, storage_path: str):
         if CLOUD_MODE:
             try:
-                _supabase.storage.from_(_bucket).remove([storage_path])
+                _get_supabase().storage.from_(_bucket).remove([storage_path])
             except Exception:
                 pass
             return
@@ -106,10 +114,10 @@ class StorageService:
         if CLOUD_MODE:
             for prefix in ("raw", "merged"):
                 try:
-                    files = _supabase.storage.from_(_bucket).list(f"{prefix}/{safe_name}")
+                    files = _get_supabase().storage.from_(_bucket).list(f"{prefix}/{safe_name}")
                     paths = [f["name"] for f in files]
                     if paths:
-                        _supabase.storage.from_(_bucket).remove([f"{prefix}/{safe_name}/{p}" for p in paths])
+                        _get_supabase().storage.from_(_bucket).remove([f"{prefix}/{safe_name}/{p}" for p in paths])
                 except Exception:
                     pass
             return
@@ -122,7 +130,7 @@ class StorageService:
         safe_name = self._sanitize_name(employee_name)
         if CLOUD_MODE:
             try:
-                return _supabase.storage.from_(_bucket).list(f"{prefix}/{safe_name}")
+                return _get_supabase().storage.from_(_bucket).list(f"{prefix}/{safe_name}")
             except Exception:
                 return []
         p = (settings.RAW_PATH if prefix == "raw" else settings.MERGED_PATH) / safe_name

@@ -7,30 +7,32 @@ from pathlib import Path
 from typing import Optional, List
 from app.config import settings, CLOUD_MODE
 
-if CLOUD_MODE:
-    from supabase import create_client, Client
-    _supabase: Optional[Client] = None
+_supabase = None
 
-    def _get_supabase() -> Client:
-        global _supabase
-        if _supabase is None:
-            _supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-        return _supabase
-else:
-    DATABASE_PATH = settings.DATABASE_PATH
-    _lock = threading.Lock()
-    _conn: Optional[sqlite3.Connection] = None
 
-    def _get_conn() -> sqlite3.Connection:
-        global _conn
-        if _conn is None:
-            _conn = sqlite3.connect(str(DATABASE_PATH), timeout=60, check_same_thread=False)
-            _conn.row_factory = sqlite3.Row
-            _conn.execute("PRAGMA journal_mode=WAL")
-            _conn.execute("PRAGMA busy_timeout=30000")
-            _conn.execute("PRAGMA synchronous=NORMAL")
-            _conn.execute("PRAGMA foreign_keys=ON")
-        return _conn
+def _get_supabase():
+    global _supabase
+    if _supabase is None:
+        from supabase import create_client
+        _supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    return _supabase
+
+
+DATABASE_PATH = settings.DATABASE_PATH
+_lock = threading.Lock()
+_conn: Optional[sqlite3.Connection] = None
+
+
+def _get_conn() -> sqlite3.Connection:
+    global _conn
+    if _conn is None:
+        _conn = sqlite3.connect(str(DATABASE_PATH), timeout=60, check_same_thread=False)
+        _conn.row_factory = sqlite3.Row
+        _conn.execute("PRAGMA journal_mode=WAL")
+        _conn.execute("PRAGMA busy_timeout=30000")
+        _conn.execute("PRAGMA synchronous=NORMAL")
+        _conn.execute("PRAGMA foreign_keys=ON")
+    return _conn
 
 
 # ── Helpers ───────────────────────────────────────────────────────
